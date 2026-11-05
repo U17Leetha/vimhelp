@@ -1,0 +1,10 @@
+# OS cruft
+.DS_Store
+
+# Test scratch space
+.tmp/
+*.testhome/
+
+# Editors
+*.swp
+*~
