@@ -141,7 +141,7 @@ mkdir -p "$WORK/empty7b"
 (cat "$ROOT/install.sh" | (cd "$WORK/empty7b" && HOME="$H7B" sh)) >"$OUT7B" 2>&1
 rc7b=$?
 if [ "${PUBLISHED:-0}" = "1" ]; then
-    check 0 $? "7b. published one-line install succeeds (streamed download)"
+    check 0 "$rc7b" "7b. published one-line install succeeds (streamed download)"
     file_x "$H7B/.local/bin/vimhelp" "7b. streamed download installed the command"
     "$H7B/.local/bin/vimhelp" --version >"$WORK/ver7b" 2>&1
     check 0 $? "7b. downloaded vimhelp --version runs"
