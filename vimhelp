@@ -3,16 +3,25 @@
 # Prints and exits; no navigation required. For Vim's full :help browser,
 # use the companion command `vimtopic <subject>`.
 #
+# On terminals at least 72 columns wide the sections print in two columns so
+# the whole sheet fits without scrolling. Terminal width is taken from
+# $COLUMNS when set, else from tput; narrower terminals get one column.
+#
 # vimhelp-install-marker: U17Leetha/vimhelp
 #
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 U17Leetha
 
-cat <<'CHEATSHEET'
+banner() {
+    cat <<'BANNER'
 ========================================
            VIM QUICK CHEATSHEET
 ========================================
+BANNER
+}
 
+body() {
+    cat <<'BODY'
 MODES
   i            Insert mode
   Esc          Normal mode
@@ -63,10 +72,54 @@ SELECTION
   d            Delete selection
   >            Indent selection
   <            Unindent selection
+BODY
+}
+
+footer() {
+    cat <<'FOOTER'
 
 TIP: Press Esc before entering commands.
 
 For a deeper dive, run: vimtopic <subject>   (e.g. vimtopic tabs)
 
 ========================================
-CHEATSHEET
+FOOTER
+}
+
+# Print stdin in two columns, splitting at the blank line closest to the
+# middle so whole sections stay together and no header is orphaned.
+two_col() {
+    awk '
+        { n[NR] = $0 }
+        END {
+            if (NR == 0) exit
+            mid = int(NR / 2)
+            s = 0; bd = NR + 1
+            for (i = 1; i <= NR; i++) {
+                if (n[i] != "") continue
+                d = (i >= mid ? i - mid : mid - i)
+                if (s == 0 || d < bd) { s = i; bd = d }
+            }
+            if (s == 0) { for (i = 1; i <= NR; i++) print n[i]; exit }
+            top = s - 1
+            bot = NR - s
+            lw = 0
+            for (i = 1; i <= top; i++) { l = length(n[i]); if (l > lw) lw = l }
+            lw += 3
+            fmt = "%-" lw "s%s\n"
+            m = (top > bot ? top : bot)
+            for (i = 1; i <= m; i++) {
+                L = (i <= top ? n[i] : "")
+                R = (i <= bot ? n[s + i] : "")
+                printf fmt, L, R
+            }
+        }'
+}
+
+cols="${COLUMNS:-}"
+if [ -z "$cols" ]; then cols="$(tput cols 2>/dev/null || true)"; fi
+case "$cols" in ''|*[!0-9]*) cols=80 ;; esac
+
+banner
+if [ "$cols" -ge 72 ]; then body | two_col; else body; fi
+footer

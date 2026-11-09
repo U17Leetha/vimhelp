@@ -26,8 +26,10 @@
 set -eu
 
 REPO_URL="https://github.com/U17Leetha/vimhelp"
-# Downloads are pinned to the official repository over HTTPS.
-RAW_BASE="https://raw.githubusercontent.com/U17Leetha/vimhelp/main"
+# Downloads are pinned to the official repository over HTTPS. VIMHELP_RAW_BASE
+# overrides the source (used by the test suite to simulate an unreachable
+# source without touching the network).
+RAW_BASE="${VIMHELP_RAW_BASE:-https://raw.githubusercontent.com/U17Leetha/vimhelp/main}"
 # The commands shipped by this project, in install order.
 PROGS="vimhelp vimtopic"
 

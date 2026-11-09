@@ -69,6 +69,12 @@ you.
 $ vimhelp             # print the cheat sheet and exit
 ```
 
+On terminals at least 72 columns wide the body prints in two columns so it
+fits on one screen without scrolling; narrower terminals get a single column.
+The width is read from `$COLUMNS` when set, otherwise `tput cols`. Force a
+layout explicitly with e.g. `COLUMNS=40 vimhelp` (single) or
+`COLUMNS=200 vimhelp` (two).
+
 ### vimtopic — the help browser
 
 ```console

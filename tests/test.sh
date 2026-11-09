@@ -170,11 +170,18 @@ else
     nok "7a. nothing installed on failure"
 fi
 
-# --- 7b. Download path behaviour (404 pre-publish / success post-publish) -------
+# --- 7b. Download path behaviour (unreachable source / published success) ------
 H7B="$WORK/home7b"
 OUT7B="$WORK/out7b"
 mkdir -p "$WORK/empty7b"
-(cat "$ROOT/install.sh" | (cd "$WORK/empty7b" && HOME="$H7B" sh)) >"$OUT7B" 2>&1
+if [ "${PUBLISHED:-0}" = "1" ]; then
+    (cat "$ROOT/install.sh" | (cd "$WORK/empty7b" && HOME="$H7B" sh)) >"$OUT7B" 2>&1
+else
+    # Simulate an unreachable source offline: the base URL points at a path
+    # that can never serve the command files, independent of publication.
+    (cat "$ROOT/install.sh" | (cd "$WORK/empty7b" && HOME="$H7B" \
+        VIMHELP_RAW_BASE="file://$WORK/nonexistent-src" sh)) >"$OUT7B" 2>&1
+fi
 rc7b=$?
 if [ "${PUBLISHED:-0}" = "1" ]; then
     check 0 "$rc7b" "7b. published one-line install succeeds (streamed download)"
@@ -183,7 +190,7 @@ if [ "${PUBLISHED:-0}" = "1" ]; then
     "$H7B/.local/bin/vimtopic" --version >"$WORK/ver7b" 2>&1
     check 0 $? "7b. downloaded vimtopic --version runs"
 else
-    if [ "$rc7b" -ne 0 ]; then ok "7b. fails clearly when download 404s (pre-publish)"; else nok "7b. fails clearly when download 404s"; fi
+    if [ "$rc7b" -ne 0 ]; then ok "7b. fails clearly when source is unreachable"; else nok "7b. fails clearly when source is unreachable"; fi
     contains "$OUT7B" "download failed" "7b. download failure message"
     if [ ! -e "$H7B/.local/bin/vimhelp" ] && [ ! -e "$H7B/.local/bin/vimtopic" ]; then
         ok "7b. no partial install left behind"
@@ -211,6 +218,32 @@ OUT8C="$WORK/out8c"
 HOME="$H8C" PATH="$H8C/.local/bin:/usr/bin:/bin" sh "$ROOT/install.sh" >"$OUT8C" 2>&1
 check 0 $? "8. install with dest already on PATH exits 0"
 absent "$OUT8C" "not in your PATH" "8. no PATH warning when dest is on PATH"
+
+# --- 9. Two-column full-sheet rendering -----------------------------------------
+HDR_RE=' {3,}(MODES|SAVE & EXIT|MOVEMENT|EDITING|SEARCH|SELECTION)$'
+OUT9W="$WORK/out9w"
+OUT9N="$WORK/out9n"
+COLUMNS=200 sh "$ROOT/vimhelp" >"$OUT9W" 2>&1
+check 0 $? "9. vimhelp exits 0 on a wide terminal"
+COLUMNS=40 sh "$ROOT/vimhelp" >"$OUT9N" 2>&1
+check 0 $? "9. vimhelp exits 0 on a narrow terminal"
+
+wide_lines="$(wc -l <"$OUT9W")"
+narrow_lines="$(wc -l <"$OUT9N")"
+if [ "$wide_lines" -lt "$narrow_lines" ]; then
+    ok "9. wide terminal prints fewer lines than narrow ($wide_lines < $narrow_lines)"
+else
+    nok "9. wide terminal prints fewer lines than narrow (got $wide_lines vs $narrow_lines)"
+fi
+
+if rg -q "$HDR_RE" "$OUT9W"; then ok "9. two-column output places right-half headers after a column gap"; else nok "9. two-column output places right-half headers after a column gap"; fi
+if rg -q "$HDR_RE" "$OUT9N"; then nok "9. narrow terminal keeps single column"; else ok "9. narrow terminal keeps single column"; fi
+
+if awk 'length > 79 { exit 1 }' "$OUT9W"; then ok "9. no two-column line exceeds 79 columns"; else nok "9. no two-column line exceeds 79 columns"; fi
+
+for want in 'VIM QUICK CHEATSHEET' 'vimtopic <subject>' 'SELECTION'; do
+    contains "$OUT9W" "$want" "9. wide output still contains: $want"
+done
 
 # --- summary ---------------------------------------------------------------------
 printf '\n'
