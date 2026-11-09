@@ -1,0 +1,9 @@
+deps:
+    README.md:
+        - ':(top)vimhelp'
+        - ':(top)vimtopic'
+        - ':(top)install.sh'
+exemptions:
+    # Temporary: semantic review inference (Bedrock) is unavailable, so this
+    # document has no ledger verdicts and is ignored by charter check.
+    - README.md

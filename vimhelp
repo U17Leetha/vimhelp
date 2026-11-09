@@ -1,80 +1,72 @@
 #!/bin/sh
-# vimhelp - open a topic from Vim's built-in help straight from your shell.
+# vimhelp - a plain, printable cheat sheet of commonly used Vim commands.
+# Prints and exits; no navigation required. For Vim's full :help browser,
+# use the companion command `vimtopic <subject>`.
 #
 # vimhelp-install-marker: U17Leetha/vimhelp
 #
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 U17Leetha
-#
-# Requires only a POSIX shell and Vim (or Neovim) on PATH.
 
-set -eu
+cat <<'CHEATSHEET'
+========================================
+           VIM QUICK CHEATSHEET
+========================================
 
-PROG="vimhelp"
-VERSION="1.0.0"
+MODES
+  i            Insert mode
+  Esc          Normal mode
+  v            Visual mode
+  V            Visual line mode
 
-usage() {
-    cat <<'EOF'
-Usage: vimhelp [OPTIONS] [SUBJECT]
+SAVE & EXIT
+  :w           Save
+  :q           Quit
+  :wq          Save and quit
+  :q!          Quit without saving
+  ZZ           Save and quit
 
-Open Vim's built-in help (:help) on SUBJECT.
+MOVEMENT
+  h j k l      Left Down Up Right
+  0            Start of line
+  $            End of line
+  gg           First line
+  G            Last line
+  :25          Go to line 25
+  w            Next word
+  b            Previous word
 
-Arguments:
-  SUBJECT        A Vim help topic, e.g. 'tabs', 'quickref', 'undo.txt'.
-                 Omit SUBJECT to open the help index.
+EDITING
+  x            Delete character
+  dd           Delete line
+  yy           Copy line
+  p            Paste after cursor
+  P            Paste before cursor
+  u            Undo
+  Ctrl+r       Redo
+  o            New line below
+  O            New line above
+  cw           Change word
+  dw           Delete word
 
-Options:
-  -h, --help     Show this help and exit.
-  -v, --version  Show version and exit.
+SEARCH
+  /word        Search forward
+  ?word        Search backward
+  n            Next match
+  N            Previous match
+  :noh         Clear highlights
 
-Examples:
-  vimhelp tabs         Open :help tabs in Vim.
-  vimhelp quickref     Open Vim's quick reference.
-  vimhelp undo.txt     Open a specific help file.
-EOF
-}
+SELECTION
+  v            Select characters
+  V            Select lines
+  y            Copy selection
+  d            Delete selection
+  >            Indent selection
+  <            Unindent selection
 
-need() {
-    command -v "$1" >/dev/null 2>&1
-}
+TIP: Press Esc before entering commands.
 
-opt="${1:-}"
+For a deeper dive, run: vimtopic <subject>   (e.g. vimtopic tabs)
 
-case "$opt" in
-    -h | --help)
-        usage
-        exit 0
-        ;;
-    -v | --version)
-        printf '%s %s\n' "$PROG" "$VERSION"
-        exit 0
-        ;;
-    -*)
-        usage >&2
-        printf '%s: unknown option: %s\n' "$PROG" "$opt" >&2
-        exit 2
-        ;;
-esac
-
-# Locate an installed Vim (prefer vim, fall back to nvim).
-editor=""
-for candidate in vim nvim; do
-    if need "$candidate"; then
-        editor="$candidate"
-        break
-    fi
-done
-
-if [ -z "$editor" ]; then
-    printf '%s: neither %s nor %s was found in PATH.\n' \
-        "$PROG" "vim" "nvim" >&2
-    printf '%s: install Vim (https://www.vim.org) and try again.\n' "$PROG" >&2
-    exit 127
-fi
-
-# Open the requested help topic; with no subject, open the help index.
-if [ -z "$opt" ]; then
-    exec "$editor" -c help
-else
-    exec "$editor" -c "help $opt"
-fi
+========================================
+CHEATSHEET

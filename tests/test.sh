@@ -1,5 +1,5 @@
 #!/bin/sh
-# tests/test.sh - verification suite for vimhelp and its installer.
+# tests/test.sh - verification suite for the vimhelp toolkit and its installer.
 #
 # Every test runs the installer against a throwaway HOME under a temporary
 # directory. Nothing here ever reads or writes your real HOME or shell
@@ -52,7 +52,7 @@ msg_mode() {
     stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null || echo unknown
 }
 
-printf '# vimhelp test suite\n'
+printf '# vimhelp toolkit test suite\n'
 printf '# root: %s\n' "$ROOT"
 printf '# work: %s\n' "$WORK"
 printf '\n'
@@ -60,6 +60,8 @@ printf '\n'
 # --- 1. Syntax ---------------------------------------------------------------
 sh -n "$ROOT/vimhelp"
 check 0 $? "1. sh -n vimhelp"
+sh -n "$ROOT/vimtopic"
+check 0 $? "1. sh -n vimtopic"
 sh -n "$ROOT/install.sh"
 check 0 $? "1. sh -n install.sh"
 sh -n "$ROOT/tests/test.sh"
@@ -70,18 +72,24 @@ H2="$WORK/home2"
 OUT2="$WORK/out2"
 HOME="$H2" sh "$ROOT/install.sh" >"$OUT2" 2>&1
 check 0 $? "2. fresh install exits 0"
-file_x "$H2/.local/bin/vimhelp" "2. installed command exists and is executable"
-"$H2/.local/bin/vimhelp" --help >"$WORK/help2" 2>&1
-check 0 $? "2. installed vimhelp --help runs"
-contains "$WORK/help2" "Usage: vimhelp" "2. --help prints usage"
-contains "$OUT2" "Installed vimhelp" "2. success message printed"
+file_x "$H2/.local/bin/vimhelp" "2. installed vimhelp exists and is executable"
+file_x "$H2/.local/bin/vimtopic" "2. installed vimtopic exists and is executable"
+"$H2/.local/bin/vimhelp" >"$WORK/sheet2" 2>&1
+check 0 $? "2. installed vimhelp runs"
+contains "$WORK/sheet2" "VIM QUICK CHEATSHEET" "2. vimhelp prints the cheat sheet"
+"$H2/.local/bin/vimtopic" --help >"$WORK/help2" 2>&1
+check 0 $? "2. installed vimtopic --help runs"
+contains "$WORK/help2" "Usage: vimtopic" "2. vimtopic --help prints usage"
+contains "$OUT2" "Installed vimhelp" "2. vimhelp success message printed"
+contains "$OUT2" "Installed vimtopic" "2. vimtopic success message printed"
 
 # --- 3. Repeated installation / update ----------------------------------------
 OUT3="$WORK/out3"
 HOME="$H2" sh "$ROOT/install.sh" >"$OUT3" 2>&1
 check 0 $? "3. re-running the installer exits 0"
 contains "$OUT3" "updating" "3. existing installation updated in place"
-file_x "$H2/.local/bin/vimhelp" "3. command still present after update"
+file_x "$H2/.local/bin/vimhelp" "3. vimhelp still present after update"
+file_x "$H2/.local/bin/vimtopic" "3. vimtopic still present after update"
 
 # --- 4. Installation from a local clone (run from elsewhere) ------------------
 H4="$WORK/home4"
@@ -89,8 +97,9 @@ mkdir -p "$WORK/elsewhere"
 OUT4="$WORK/out4"
 (cd "$WORK/elsewhere" && HOME="$H4" sh "$ROOT/install.sh") >"$OUT4" 2>&1
 check 0 $? "4. clone install works from another directory"
-file_x "$H4/.local/bin/vimhelp" "4. clone-installed command exists"
-contains "$OUT4" "local repository" "4. local clone copy was used, not a download"
+file_x "$H4/.local/bin/vimhelp" "4. clone-installed vimhelp exists"
+file_x "$H4/.local/bin/vimtopic" "4. clone-installed vimtopic exists"
+contains "$OUT4" "local repository" "4. local clone copies were used, not a download"
 
 # --- 5. Installer streamed through stdin --------------------------------------
 # Streamed via `cat ... | sh` with the clone as CWD: $0 no longer points at
@@ -101,9 +110,10 @@ H5="$WORK/home5"
 OUT5="$WORK/out5"
 (cat "$ROOT/install.sh" | (cd "$ROOT" && HOME="$H5" sh)) >"$OUT5" 2>&1
 check 0 $? "5. streamed installer (stdin) exits 0"
-file_x "$H5/.local/bin/vimhelp" "5. streamed install produced the command"
+file_x "$H5/.local/bin/vimhelp" "5. streamed install produced vimhelp"
+file_x "$H5/.local/bin/vimtopic" "5. streamed install produced vimtopic"
 
-# --- 6. Destination occupied by an unrelated file ------------------------------
+# --- 6a. vimhelp destination occupied by an unrelated file --------------------
 H6="$WORK/home6"
 mkdir -p "$H6/.local/bin"
 printf '#!/bin/sh\necho UNRELATED TOOL\n' > "$H6/.local/bin/vimhelp"
@@ -111,12 +121,34 @@ chmod 700 "$H6/.local/bin/vimhelp"
 OUT6="$WORK/out6"
 HOME="$H6" sh "$ROOT/install.sh" >"$OUT6" 2>&1
 rc6=$?
-if [ "$rc6" -ne 0 ]; then ok "6. refuses unrelated destination (non-zero exit)"; else nok "6. refuses unrelated destination (exited 0)"; fi
-contains "$OUT6" "not a vimhelp installation" "6. informative refusal message"
+if [ "$rc6" -ne 0 ]; then ok "6a. refuses unrelated vimhelp destination (non-zero exit)"; else nok "6a. refuses unrelated vimhelp destination (exited 0)"; fi
+contains "$OUT6" "not a vimhelp installation" "6a. informative refusal message"
 if grep -q 'UNRELATED TOOL' "$H6/.local/bin/vimhelp" 2>/dev/null; then
-    ok "6. unrelated file left untouched"
+    ok "6a. unrelated file left untouched"
 else
-    nok "6. unrelated file left untouched"
+    nok "6a. unrelated file left untouched"
+fi
+# Fail-fast validation must leave no partial install.
+if [ ! -e "$H6/.local/bin/vimtopic" ]; then
+    ok "6a. refusal leaves the kit untouched (no partial install)"
+else
+    nok "6a. refusal leaves the kit untouched (no partial install)"
+fi
+
+# --- 6b. vimtopic destination occupied by an unrelated file -------------------
+H6B="$WORK/home6b"
+mkdir -p "$H6B/.local/bin"
+printf '#!/bin/sh\necho UNRELATED TOOL\n' > "$H6B/.local/bin/vimtopic"
+chmod 700 "$H6B/.local/bin/vimtopic"
+OUT6B="$WORK/out6b"
+HOME="$H6B" sh "$ROOT/install.sh" >"$OUT6B" 2>&1
+rc6b=$?
+if [ "$rc6b" -ne 0 ]; then ok "6b. refuses unrelated vimtopic destination (non-zero exit)"; else nok "6b. refuses unrelated vimtopic destination (exited 0)"; fi
+contains "$OUT6B" "not a vimtopic installation" "6b. informative refusal message"
+if grep -q 'UNRELATED TOOL' "$H6B/.local/bin/vimtopic" 2>/dev/null; then
+    ok "6b. unrelated file left untouched"
+else
+    nok "6b. unrelated file left untouched"
 fi
 
 # --- 7a. No downloader available and no local copy ------------------------------
@@ -132,7 +164,11 @@ mkdir -p "$WORK/empty7"
 rc7=$?
 if [ "$rc7" -ne 0 ]; then ok "7a. fails clearly without a downloader"; else nok "7a. fails clearly without a downloader (exited 0)"; fi
 contains "$OUT7" "curl or wget" "7a. error names the missing dependency"
-if [ ! -e "$H7/.local/bin/vimhelp" ]; then ok "7a. nothing installed on failure"; else nok "7a. nothing installed on failure"; fi
+if [ ! -e "$H7/.local/bin/vimhelp" ] && [ ! -e "$H7/.local/bin/vimtopic" ]; then
+    ok "7a. nothing installed on failure"
+else
+    nok "7a. nothing installed on failure"
+fi
 
 # --- 7b. Download path behaviour (404 pre-publish / success post-publish) -------
 H7B="$WORK/home7b"
@@ -142,18 +178,25 @@ mkdir -p "$WORK/empty7b"
 rc7b=$?
 if [ "${PUBLISHED:-0}" = "1" ]; then
     check 0 "$rc7b" "7b. published one-line install succeeds (streamed download)"
-    file_x "$H7B/.local/bin/vimhelp" "7b. streamed download installed the command"
-    "$H7B/.local/bin/vimhelp" --version >"$WORK/ver7b" 2>&1
-    check 0 $? "7b. downloaded vimhelp --version runs"
+    file_x "$H7B/.local/bin/vimhelp" "7b. streamed download installed vimhelp"
+    file_x "$H7B/.local/bin/vimtopic" "7b. streamed download installed vimtopic"
+    "$H7B/.local/bin/vimtopic" --version >"$WORK/ver7b" 2>&1
+    check 0 $? "7b. downloaded vimtopic --version runs"
 else
     if [ "$rc7b" -ne 0 ]; then ok "7b. fails clearly when download 404s (pre-publish)"; else nok "7b. fails clearly when download 404s"; fi
     contains "$OUT7B" "download failed" "7b. download failure message"
-    if [ ! -e "$H7B/.local/bin/vimhelp" ]; then ok "7b. no partial install left behind"; else nok "7b. no partial install left behind"; fi
+    if [ ! -e "$H7B/.local/bin/vimhelp" ] && [ ! -e "$H7B/.local/bin/vimtopic" ]; then
+        ok "7b. no partial install left behind"
+    else
+        nok "7b. no partial install left behind"
+    fi
 fi
 
 # --- 8. Permissions and PATH guidance -------------------------------------------
 mode8="$(msg_mode "$H2/.local/bin/vimhelp")"
-if [ "$mode8" = "755" ]; then ok "8. installed command mode is 755"; else nok "8. installed command mode is 755 (got $mode8)"; fi
+if [ "$mode8" = "755" ]; then ok "8. installed vimhelp mode is 755"; else nok "8. installed vimhelp mode is 755 (got $mode8)"; fi
+mode8="$(msg_mode "$H2/.local/bin/vimtopic")"
+if [ "$mode8" = "755" ]; then ok "8. installed vimtopic mode is 755"; else nok "8. installed vimtopic mode is 755 (got $mode8)"; fi
 
 H8="$WORK/home8"
 OUT8="$WORK/out8"

@@ -1,5 +1,5 @@
 #!/bin/sh
-# install.sh - install or update the vimhelp command.
+# install.sh - install or update the vimhelp and vimtopic commands.
 #
 # Supports both installation methods:
 #   1. Piped:  curl -fsSL https://raw.githubusercontent.com/U17Leetha/vimhelp/main/install.sh | sh
@@ -7,26 +7,29 @@
 #
 # Behaviour:
 #   * POSIX /bin/sh compatible (no Bash required); works on macOS and Linux.
-#   * Installs to $HOME/.local/bin/vimhelp, creating the directory if needed.
+#   * Installs to $HOME/.local/bin/, creating the directory if needed.
 #   * Never requires sudo/root and never modifies shell or global config files.
-#   * Re-running the installer updates an existing vimhelp installation.
-#   * Refuses to overwrite a destination that is not a vimhelp installation.
-#   * Piped runs download the command from the pinned official repository over
-#     HTTPS; cloned runs install the local copy that ships beside this script.
-#   * Failed downloads never leave a partially installed command behind.
+#   * Re-running the installer updates an existing installation in place.
+#   * Refuses to overwrite a destination that is not part of this project.
+#   * Piped runs download the commands from the pinned official repository
+#     over HTTPS; cloned runs install the local copies beside this script.
+#   * All commands are fetched and validated before any is installed, so a
+#     failure never leaves the toolkit partially changed.
+#
+# Commands:
+#   vimhelp    Plain printable cheat sheet of common Vim commands.
+#   vimtopic   Opens Vim's built-in :help browser on a topic.
 #
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 U17Leetha
 
 set -eu
 
-PROG="vimhelp"
 REPO_URL="https://github.com/U17Leetha/vimhelp"
 # Downloads are pinned to the official repository over HTTPS.
 RAW_BASE="https://raw.githubusercontent.com/U17Leetha/vimhelp/main"
-# Unique marker embedded in the vimhelp script; used to recognise our own
-# installations and to sanity-check downloaded content.
-MARKER="vimhelp-install-marker: U17Leetha/vimhelp"
+# The commands shipped by this project, in install order.
+PROGS="vimhelp vimtopic"
 
 if [ -z "${HOME:-}" ]; then
     printf 'vimhelp-install: HOME is not set; cannot determine install location.\n' >&2
@@ -34,7 +37,6 @@ if [ -z "${HOME:-}" ]; then
 fi
 
 DEST_DIR="${HOME}/.local/bin"
-DEST_FILE="${DEST_DIR}/${PROG}"
 
 say() {
     printf '%s\n' "$*"
@@ -49,89 +51,106 @@ need() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Unique marker embedded in each shipped script; used to recognise our own
+# installations and to sanity-check downloaded content.
+marker_for() {
+    case "$1" in
+        vimhelp)  printf 'vimhelp-install-marker: U17Leetha/vimhelp\n' ;;
+        vimtopic) printf 'vimtopic-install-marker: U17Leetha/vimhelp\n' ;;
+        *)        die "internal error: no marker defined for $1" ;;
+    esac
+}
+
 # --- staging + cleanup -------------------------------------------------------
-# All downloads happen in a temporary file; it is only moved into place after
-# it has been fully downloaded and validated. Any exit path cleans it up.
-TMP=""
+# Everything is gathered into a temporary directory and only moved into place
+# after every command has been fully fetched and validated. Any exit path
+# cleans up the staging area; the destination is never partially updated.
+WORKDIR=""
 STAGED=""
 cleanup() {
-    [ -n "$TMP" ] && rm -f "$TMP" 2>/dev/null || true
+    [ -n "$WORKDIR" ] && rm -rf "$WORKDIR" 2>/dev/null || true
     [ -n "$STAGED" ] && rm -f "$STAGED" 2>/dev/null || true
 }
 trap cleanup EXIT HUP INT TERM
 
-make_tmp() {
-    # $1: suffix for the temporary file name.
-    if need mktemp; then
-        mktemp "${TMPDIR:-/tmp}/vimhelp-install.XXXXXXXXXX"
-    else
-        printf '%s/%s.install.%s.%s' \
-            "${TMPDIR:-/tmp}" "$PROG" "$$" "$1"
-    fi
-}
+if need mktemp; then
+    WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/vimhelp-install.XXXXXXXXXX")" \
+        || die "could not create temporary directory"
+else
+    WORKDIR="${TMPDIR:-/tmp}/vimhelp-install.$$"
+    mkdir -p "$WORKDIR" || die "could not create temporary directory"
+fi
 
-# --- resolve the vimhelp script to install -----------------------------------
-# Prefer the copy that ships beside this installer (clone method). When the
+# --- resolve the source for each command --------------------------------------
+# Prefer the copies that ship beside this installer (clone method). When the
 # installer itself is streamed through stdin, $0 does not point at the
 # repository, so download from the pinned official source instead.
 SELF_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)" || SELF_DIR=""
 
-if [ -n "$SELF_DIR" ] && [ -f "${SELF_DIR}/${PROG}" ]; then
-    SRC="${SELF_DIR}/${PROG}"
-    say "Using vimhelp script from local repository: ${SRC}"
-else
-    say "Streaming install detected; downloading ${PROG} from ${REPO_URL} ..."
-    if need curl; then
-        TMP="$(make_tmp dl)"
-        curl -fsSL "${RAW_BASE}/${PROG}" -o "$TMP" \
-            || die "download failed: ${RAW_BASE}/${PROG} (network error or not found)"
-    elif need wget; then
-        TMP="$(make_tmp dl)"
-        wget -q -O "$TMP" "${RAW_BASE}/${PROG}" \
-            || die "download failed: ${RAW_BASE}/${PROG} (network error or not found)"
+for name in $PROGS; do
+    SRC="$WORKDIR/$name"
+    if [ -n "$SELF_DIR" ] && [ -f "${SELF_DIR}/${name}" ]; then
+        say "Using ${name} script from local repository: ${SELF_DIR}/${name}"
+        cat -- "${SELF_DIR}/${name}" > "$SRC" \
+            || die "could not read ${SELF_DIR}/${name}"
     else
-        die "piped installation requires curl or wget to download ${PROG}; or use the git clone method"
+        say "Streaming install detected; downloading ${name} from ${REPO_URL} ..."
+        if need curl; then
+            curl -fsSL "${RAW_BASE}/${name}" -o "$SRC" \
+                || die "download failed: ${RAW_BASE}/${name} (network error or not found)"
+        elif need wget; then
+            wget -q -O "$SRC" "${RAW_BASE}/${name}" \
+                || die "download failed: ${RAW_BASE}/${name} (network error or not found)"
+        else
+            die "piped installation requires curl or wget to download ${name}; or use the git clone method"
+        fi
     fi
-    SRC="$TMP"
-fi
+done
 
-# --- validate the source -------------------------------------------------------
-[ -s "$SRC" ] || die "the ${PROG} script is missing or empty; aborting without changes"
-grep -q "$MARKER" "$SRC" \
-    || die "source does not look like a ${PROG} script (marker not found); aborting without changes"
+# --- validate every source before installing any -------------------------------
+for name in $PROGS; do
+    SRC="$WORKDIR/$name"
+    [ -s "$SRC" ] || die "the ${name} script is missing or empty; aborting without changes"
+    grep -q "$(marker_for "$name")" "$SRC" \
+        || die "source does not look like a ${name} script (marker not found); aborting without changes"
+done
 
 # --- refuse to clobber unrelated files -----------------------------------------
-if [ -e "$DEST_FILE" ] || [ -L "$DEST_FILE" ]; then
-    if grep -q "$MARKER" "$DEST_FILE" 2>/dev/null; then
-        say "Existing ${PROG} installation found; updating in place."
-    else
-        die "${DEST_FILE} already exists and is not a ${PROG} installation. Refusing to overwrite it. Remove or move that file first, then re-run the installer."
+for name in $PROGS; do
+    DEST_FILE="${DEST_DIR}/${name}"
+    if [ -e "$DEST_FILE" ] || [ -L "$DEST_FILE" ]; then
+        if grep -q "$(marker_for "$name")" "$DEST_FILE" 2>/dev/null; then
+            say "Existing ${name} installation found; updating in place."
+        else
+            die "${DEST_FILE} already exists and is not a ${name} installation. Refusing to overwrite it. Remove or move that file first, then re-run the installer."
+        fi
     fi
-fi
+done
 
 # --- install --------------------------------------------------------------------
 mkdir -p "$DEST_DIR" || die "could not create ${DEST_DIR}"
 
-# Stage inside the destination directory so the final move is atomic on the
-# same filesystem, and so a failure can never leave a partial command.
-STAGED="${DEST_FILE}.install.$$"
-cat -- "$SRC" > "$STAGED" || die "could not write ${STAGED}"
-chmod 755 "$STAGED" || die "could not make ${STAGED} executable"
-mv -f -- "$STAGED" "$DEST_FILE" || die "could not move staged file into place"
-STAGED=""
-
-[ -x "$DEST_FILE" ] || die "installation failed: ${DEST_FILE} is not executable"
-
-say "Installed ${PROG} to ${DEST_FILE}"
+for name in $PROGS; do
+    DEST_FILE="${DEST_DIR}/${name}"
+    # Stage inside the destination directory so the final move is atomic on
+    # the same filesystem, and so a failure can never leave a partial command.
+    STAGED="${DEST_FILE}.install.$$"
+    cat -- "$WORKDIR/$name" > "$STAGED" || die "could not write ${STAGED}"
+    chmod 755 "$STAGED" || die "could not make ${STAGED} executable"
+    mv -f -- "$STAGED" "$DEST_FILE" || die "could not move staged file into place"
+    STAGED=""
+    [ -x "$DEST_FILE" ] || die "installation failed: ${DEST_FILE} is not executable"
+    say "Installed ${name} to ${DEST_FILE}"
+done
 
 # --- PATH guidance (never modifies shell configuration) --------------------------
 case ":${PATH:-}:" in
     *":${DEST_DIR}:"*)
-        say "You can now run: ${PROG} --help"
+        say "You can now run: vimhelp   and:   vimtopic --help"
         ;;
     *)
         say ""
-        say "WARNING: ${DEST_DIR} is not in your PATH, so the '${PROG}' command will not be found yet."
+        say "WARNING: ${DEST_DIR} is not in your PATH, so the commands will not be found yet."
         say "Add it to your shell configuration yourself, e.g.:"
         case "${SHELL:-}" in
             */zsh)
